@@ -11,9 +11,10 @@ interface GestureControllerProps {
   onPhotoChange?: (direction: 'next' | 'prev') => void;
   onCameraMove?: (direction: 'forward' | 'backward' | null) => void;
   onSnowToggle?: () => void;
+  debugMode?: boolean;
 }
 
-export const GestureController: React.FC<GestureControllerProps> = ({ onModeChange, currentMode, onHandPosition, onTwoHandsDetected, onPhotoChange, onCameraMove, onSnowToggle }) => {
+export const GestureController: React.FC<GestureControllerProps> = ({ onModeChange, currentMode, onHandPosition, onTwoHandsDetected, onPhotoChange, onCameraMove, onSnowToggle, debugMode = false }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -517,13 +518,14 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
   }, [currentMode]);
 
   return (
-    <div className="absolute top-6 right-[8%] z-50 flex flex-col items-end pointer-events-none">
-
-      
-      {/* Camera Preview Frame */}
-      <div className="relative w-[18.75vw] h-[14.0625vw] border-2 border-[#D4AF37] rounded-lg overflow-hidden shadow-[0_0_20px_rgba(212,175,55,0.3)] bg-black">
-        {/* Decorative Lines */}
-        <div className="absolute inset-0 border border-[#F5E6BF]/20 m-1 rounded-sm z-10"></div>
+    <div className={`absolute top-6 right-[8%] z-50 flex flex-col items-end pointer-events-none ${!debugMode ? 'opacity-0 pointer-events-none w-0 h-0 overflow-hidden' : ''}`}>
+      {/* Camera Preview Frame - Always rendered for gesture detection, hidden when debugMode is OFF */}
+      <div className={`relative border-2 border-[#D4AF37] rounded-lg overflow-hidden shadow-[0_0_20px_rgba(212,175,55,0.3)] bg-black ${
+        debugMode ? 'w-[18.75vw] h-[14.0625vw]' : 'w-1 h-1 absolute -top-[9999px]'
+      }`}>
+        {debugMode && (
+          <div className="absolute inset-0 border border-[#F5E6BF]/20 m-1 rounded-sm z-10"></div>
+        )}
         
         <video
           ref={videoRef}
@@ -539,15 +541,8 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
           className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 pointer-events-none z-20"
         />
         
-        {/* Hand Position Debug */}
-        {/* {handPos && (
-          <div className="absolute top-2 left-2 text-[10px] text-[#D4AF37] bg-black/70 px-2 py-1 rounded font-mono">
-            X: {handPos.x.toFixed(2)} Y: {handPos.y.toFixed(2)}
-          </div>
-        )} */}
-        
         {/* Hand Position Indicator */}
-        {handPos && (
+        {debugMode && handPos && (
           <div 
             className="absolute w-2 h-2 bg-[#D4AF37] rounded-full border border-white"
             style={{
@@ -557,19 +552,20 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
             }}
           />
         )}
-    
       </div>
 
-      {/* Toggle Debug Button */}
-      <button
-        onClick={() => setShowDebug(!showDebug)}
-        className="mt-2 px-3 py-1.5 bg-black/70 border border-[#D4AF37]/50 rounded-lg text-[10px] font-mono text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors pointer-events-auto"
-      >
-        {showDebug ? '🔽 Ẩn Debug' : '🔼 Hiện Debug'}
-      </button>
+      {/* Toggle Debug Button - Only when debugMode ON */}
+      {debugMode && (
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className="mt-2 px-3 py-1.5 bg-black/70 border border-[#D4AF37]/50 rounded-lg text-[10px] font-mono text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors pointer-events-auto"
+        >
+          {showDebug ? '🔽 Ẩn Debug' : '🔼 Hiện Debug'}
+        </button>
+      )}
 
       {/* Debug Info Panel */}
-      {showDebug && (
+      {debugMode && showDebug && (
         <div className="mt-2 bg-black/80 backdrop-blur-md border border-[#D4AF37]/50 rounded-lg p-3 text-xs font-mono min-w-[200px]">
           <div className="text-[#D4AF37] font-bold mb-2 text-center border-b border-[#D4AF37]/30 pb-1">
             🎄 Theo Dõi Cử Chỉ

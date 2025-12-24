@@ -54,9 +54,36 @@ export default function App() {
   const [twoHandsDetected, setTwoHandsDetected] = useState(false);
   const [closestPhoto, setClosestPhoto] = useState<string | null>(null);
   const [cameraMove, setCameraMove] = useState<'forward' | 'backward' | null>(null);
-  const [showSnow, setShowSnow] = useState(false);
+  const [showSnow, setShowSnow] = useState(true); // Default: ON
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [showPhotoViewer, setShowPhotoViewer] = useState(false);
+  
+  // Settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [debugMode, setDebugMode] = useState(false); // Default: OFF
+  const [snowEnabled, setSnowEnabled] = useState(true); // Default: ON
+  const [uploadMode, setUploadMode] = useState(true); // Default: ON (upload), OFF = load from folder
+
+  // Load photos from public/photos folder
+  const loadPhotosFromFolder = async () => {
+    const photos: string[] = [];
+    // Try to load photos 1.jpg to 22.jpg from public/photos
+    for (let i = 1; i <= 22; i++) {
+      const url = `/photos/${i}.jpg`;
+      try {
+        const response = await fetch(url, { method: 'HEAD' });
+        if (response.ok) {
+          photos.push(url);
+        }
+      } catch {
+        // Photo doesn't exist, skip
+      }
+    }
+    if (photos.length > 0) {
+      setUploadedPhotos(photos);
+      setCurrentPhotoIndex(0);
+    }
+  };
 
   // Check for share parameter in URL on mount
   useEffect(() => {
@@ -100,6 +127,18 @@ export default function App() {
 
     loadSharedPhotos();
   }, []);
+
+  // Load photos from folder when uploadMode is OFF
+  useEffect(() => {
+    if (!uploadMode && !isSharedView) {
+      loadPhotosFromFolder();
+    }
+  }, [uploadMode, isSharedView]);
+
+  // Sync snow state with snowEnabled setting
+  useEffect(() => {
+    setShowSnow(snowEnabled);
+  }, [snowEnabled]);
 
   const toggleMode = () => {
     setMode((prev) => (prev === TreeMode.FORMED ? TreeMode.CHAOS : TreeMode.FORMED));
@@ -218,7 +257,75 @@ export default function App() {
         onPhotoChange={handlePhotoChange}
         onCameraMove={handleCameraMove}
         onSnowToggle={handleSnowToggle}
+        debugMode={debugMode}
       />
+      
+      {/* Settings Button */}
+      <button
+        onClick={() => setShowSettings(!showSettings)}
+        className="fixed top-4 left-4 z-50 w-10 h-10 bg-black/70 border border-[#D4AF37]/50 rounded-full flex items-center justify-center text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors"
+      >
+        ⚙️
+      </button>
+      
+      {/* Settings Menu */}
+      {showSettings && (
+        <div className="fixed top-16 left-4 z-50 bg-black/90 backdrop-blur-md border border-[#D4AF37]/50 rounded-lg p-4 min-w-[250px] shadow-xl">
+          <div className="text-[#D4AF37] font-bold mb-4 text-center border-b border-[#D4AF37]/30 pb-2">
+            ⚙️ Cài đặt
+          </div>
+          
+          {/* Debug Mode Toggle */}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[#F5E6BF] text-sm">🔧 Chế độ Debug</span>
+            <button
+              onClick={() => setDebugMode(!debugMode)}
+              className={`w-12 h-6 rounded-full transition-colors ${
+                debugMode ? 'bg-green-500' : 'bg-gray-600'
+              }`}
+            >
+              <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                debugMode ? 'translate-x-6' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </div>
+          
+          {/* Snow Toggle */}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[#F5E6BF] text-sm">❄️ Hiệu ứng tuyết</span>
+            <button
+              onClick={() => setSnowEnabled(!snowEnabled)}
+              className={`w-12 h-6 rounded-full transition-colors ${
+                snowEnabled ? 'bg-green-500' : 'bg-gray-600'
+              }`}
+            >
+              <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                snowEnabled ? 'translate-x-6' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </div>
+          
+          {/* Upload Mode Toggle */}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[#F5E6BF] text-sm">📤 Tải ảnh lên</span>
+            <button
+              onClick={() => setUploadMode(!uploadMode)}
+              className={`w-12 h-6 rounded-full transition-colors ${
+                uploadMode ? 'bg-green-500' : 'bg-gray-600'
+              }`}
+            >
+              <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                uploadMode ? 'translate-x-6' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </div>
+          
+          {/* Info text */}
+          <div className="text-[#F5E6BF]/50 text-xs mt-2 pt-2 border-t border-[#D4AF37]/20">
+            {uploadMode ? '📤 Đang dùng ảnh tải lên' : '📁 Đang dùng ảnh từ folder photos/'}
+          </div>
+        </div>
+      )}
       
       {/* Photo Overlay - Shows when two hands detected */}
       {twoHandsDetected && uploadedPhotos.length > 0 && (
