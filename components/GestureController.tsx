@@ -8,15 +8,34 @@ interface GestureControllerProps {
   currentMode: TreeMode;
   onHandPosition?: (x: number, y: number, detected: boolean) => void;
   onTwoHandsDetected?: (detected: boolean) => void;
+  onPhotoChange?: (direction: 'next' | 'prev') => void;
+  onCameraMove?: (direction: 'forward' | 'backward' | null) => void;
+  onSnowToggle?: () => void;
 }
 
-export const GestureController: React.FC<GestureControllerProps> = ({ onModeChange, currentMode, onHandPosition, onTwoHandsDetected }) => {
+export const GestureController: React.FC<GestureControllerProps> = ({ onModeChange, currentMode, onHandPosition, onTwoHandsDetected, onPhotoChange, onCameraMove, onSnowToggle }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [gestureStatus, setGestureStatus] = useState<string>("Initializing...");
   const [handPos, setHandPos] = useState<{ x: number; y: number } | null>(null);
   const lastModeRef = useRef<TreeMode>(currentMode);
+  
+  // Refs to store latest callbacks (to avoid stale closure)
+  const onPhotoChangeRef = useRef(onPhotoChange);
+  const onCameraMoveRef = useRef(onCameraMove);
+  const onSnowToggleRef = useRef(onSnowToggle);
+  const onHandPositionRef = useRef(onHandPosition);
+  const onTwoHandsDetectedRef = useRef(onTwoHandsDetected);
+  
+  // Keep refs up to date
+  useEffect(() => {
+    onPhotoChangeRef.current = onPhotoChange;
+    onCameraMoveRef.current = onCameraMove;
+    onSnowToggleRef.current = onSnowToggle;
+    onHandPositionRef.current = onHandPosition;
+    onTwoHandsDetectedRef.current = onTwoHandsDetected;
+  }, [onPhotoChange, onCameraMove, onSnowToggle, onHandPosition, onTwoHandsDetected]);
   
   // Debug panel toggle
   const [showDebug, setShowDebug] = useState(true);
@@ -35,7 +54,14 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
   // Debounce logic refs
   const openFrames = useRef(0);
   const closedFrames = useRef(0);
+  const thumbsUpFrames = useRef(0);
+  const thumbsDownFrames = useRef(0);
+  const pinchFrames = useRef(0);
+  const victoryFrames = useRef(0);
+  const lastSnowToggleTime = useRef(0);
+  const lastPhotoChangeTime = useRef(0);
   const CONFIDENCE_THRESHOLD = 5; // Number of consecutive frames to confirm gesture
+  const PHOTO_CHANGE_COOLDOWN = 500; // ms cooldown between photo changes
 
   useEffect(() => {
     let handLandmarker: HandLandmarker | null = null;
@@ -191,16 +217,15 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
           // Update debug info - hands count
           setDebugInfo(prev => ({ ...prev, handsCount: result.landmarks.length }));
           
-          if (onTwoHandsDetected) {
-            onTwoHandsDetected(twoHandsDetected);
+          if (onTwoHandsDetectedRef.current) {
+            onTwoHandsDetectedRef.current(twoHandsDetected);
           }
 
           // Draw all detected hands at once
           drawAllHands(result.landmarks);
           
-          // Use first hand for gesture detection
-          const landmarks = result.landmarks[0];
-          detectGesture(landmarks);
+          // Detect gestures from all hands
+          detectGesture(result.landmarks, result.handednesses);
         } else {
             setDebugInfo(prev => ({ 
               ...prev, 
@@ -211,11 +236,11 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
             }));
             setGestureStatus("No hand detected");
             setHandPos(null); // Clear hand position when no hand detected
-            if (onHandPosition) {
-              onHandPosition(0.5, 0.5, false); // No hand detected
+            if (onHandPositionRef.current) {
+              onHandPositionRef.current(0.5, 0.5, false); // No hand detected
             }
-            if (onTwoHandsDetected) {
-              onTwoHandsDetected(false);
+            if (onTwoHandsDetectedRef.current) {
+              onTwoHandsDetectedRef.current(false);
             }
             // Clear canvas when no hand detected
             if (canvasRef.current) {
@@ -234,105 +259,248 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
       animationFrameId = requestAnimationFrame(predictWebcam);
     };
 
-    const detectGesture = (landmarks: any[]) => {
+    const detectGesture = (allLandmarks: any[][], handednesses?: any[][]) => {
+      // Use first hand for main gesture detection
+      const landmarks = allLandmarks[0];
+      
       // 0 is Wrist
-      // Tips: 8 (Index), 12 (Middle), 16 (Ring), 20 (Pinky)
-      // Bases (MCP): 5, 9, 13, 17
+      // Tips: 4 (Thumb), 8 (Index), 12 (Middle), 16 (Ring), 20 (Pinky)
+      // Bases (MCP): 1 (Thumb), 5, 9, 13, 17
       
       const wrist = landmarks[0];
+      const thumbTip = landmarks[4];
+      const thumbBase = landmarks[2];
+      const indexTip = landmarks[8];
+      const indexBase = landmarks[5];
+      const middleTip = landmarks[12];
+      const middleBase = landmarks[9];
+      const ringTip = landmarks[16];
+      const ringBase = landmarks[13];
+      const pinkyTip = landmarks[20];
+      const pinkyBase = landmarks[17];
       
-      // Calculate palm center (average of wrist and finger bases)
-      // Finger bases (MCP joints): 5, 9, 13, 17
+      // Calculate palm center
       const palmCenterX = (landmarks[0].x + landmarks[5].x + landmarks[9].x + landmarks[13].x + landmarks[17].x) / 5;
       const palmCenterY = (landmarks[0].y + landmarks[5].y + landmarks[9].y + landmarks[13].y + landmarks[17].y) / 5;
       
       // Send hand position for camera control
-      // Normalize coordinates: x and y are in [0, 1], center at (0.5, 0.5)
       setHandPos({ x: palmCenterX, y: palmCenterY });
-      if (onHandPosition) {
-        onHandPosition(palmCenterX, palmCenterY, true);
+      if (onHandPositionRef.current) {
+        onHandPositionRef.current(palmCenterX, palmCenterY, true);
       }
       
-      const fingerTips = [8, 12, 16, 20];
-      const fingerBases = [5, 9, 13, 17];
+      // === Check each finger extension ===
+      const fingerTips = [indexTip, middleTip, ringTip, pinkyTip];
+      const fingerBases = [indexBase, middleBase, ringBase, pinkyBase];
       
       let extendedFingers = 0;
+      const fingerStates = [false, false, false, false]; // index, middle, ring, pinky
 
       for (let i = 0; i < 4; i++) {
-        const tip = landmarks[fingerTips[i]];
-        const base = landmarks[fingerBases[i]];
-        
-        // Calculate distance from wrist to tip vs wrist to base
+        const tip = fingerTips[i];
+        const base = fingerBases[i];
         const distTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
         const distBase = Math.hypot(base.x - wrist.x, base.y - wrist.y);
         
-        // Heuristic: If tip is significantly further from wrist than base, it's extended
-        if (distTip > distBase * 1.5) { // 1.5 multiplier is a safe heuristic for extension
+        if (distTip > distBase * 1.5) {
           extendedFingers++;
+          fingerStates[i] = true;
         }
       }
       
-      // Thumb check (Tip 4 vs Base 2)
-      const thumbTip = landmarks[4];
-      const thumbBase = landmarks[2];
+      // Thumb check
       const distThumbTip = Math.hypot(thumbTip.x - wrist.x, thumbTip.y - wrist.y);
       const distThumbBase = Math.hypot(thumbBase.x - wrist.x, thumbBase.y - wrist.y);
-      if (distThumbTip > distThumbBase * 1.2) extendedFingers++;
-
-      // DECISION
-      if (extendedFingers >= 4) {
-        // OPEN HAND -> UNLEASH (CHAOS)
+      const thumbExtended = distThumbTip > distThumbBase * 1.2;
+      if (thumbExtended) extendedFingers++;
+      
+      // === Detect PINCH from ALL hands ===
+      // Check each hand for pinch and determine which hand is pinching
+      let leftHandPinch = false;
+      let rightHandPinch = false;
+      
+      for (let i = 0; i < allLandmarks.length; i++) {
+        const hand = allLandmarks[i];
+        const handThumbTip = hand[4];
+        const handIndexTip = hand[8];
+        const handPalmX = (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5;
+        
+        const pinchDist = Math.hypot(handThumbTip.x - handIndexTip.x, handThumbTip.y - handIndexTip.y);
+        const isHandPinching = pinchDist < 0.05;
+        
+        if (isHandPinching) {
+          // Camera is mirrored:
+          // Hand on LEFT side of screen (X < 0.5) = User's RIGHT hand
+          // Hand on RIGHT side of screen (X > 0.5) = User's LEFT hand
+          if (handPalmX > 0.5) {
+            leftHandPinch = true; // User's left hand (right side of mirrored image)
+          } else {
+            rightHandPinch = true; // User's right hand (left side of mirrored image)
+          }
+        }
+      }
+      
+      const isPinching = leftHandPinch || rightHandPinch;
+      
+      // === Detect THUMBS UP/DOWN ===
+      const thumbPointingUp = thumbTip.y < thumbBase.y - 0.05;
+      const thumbPointingDown = thumbTip.y > thumbBase.y + 0.05;
+      const otherFingersClosed = !fingerStates[0] && !fingerStates[1] && !fingerStates[2] && !fingerStates[3];
+      
+      const isThumbsUp = thumbExtended && thumbPointingUp && otherFingersClosed;
+      const isThumbsDown = thumbExtended && thumbPointingDown && otherFingersClosed;
+      
+      // === Detect VICTORY ✌️ (index + middle extended, others closed) ===
+      const isVictory = fingerStates[0] && fingerStates[1] && !fingerStates[2] && !fingerStates[3] && !thumbExtended;
+      
+      // === DECISION LOGIC ===
+      let detectedGesture = 'Không có';
+      
+      // Priority: Pinch > Thumbs > Wave > Open/Closed
+      if (isPinching) {
+        pinchFrames.current++;
+        thumbsUpFrames.current = 0;
+        thumbsDownFrames.current = 0;
+        victoryFrames.current = 0;
+        openFrames.current = 0;
+        closedFrames.current = 0;
+        
+        const now = Date.now();
+        
+        if (pinchFrames.current > CONFIDENCE_THRESHOLD && onPhotoChangeRef.current) {
+          if (now - lastPhotoChangeTime.current > PHOTO_CHANGE_COOLDOWN) {
+            if (leftHandPinch) {
+              // Left hand pinch -> Previous photo (swipe left)
+              detectedGesture = '🤏 TAY TRÁI ◀️ Ảnh trước';
+              console.log('[GESTURE] Calling onPhotoChange: prev');
+              onPhotoChangeRef.current('prev');
+              lastPhotoChangeTime.current = now;
+            } else if (rightHandPinch) {
+              // Right hand pinch -> Next photo (swipe right)
+              detectedGesture = '🤏 TAY PHẢI ▶️ Ảnh sau';
+              console.log('[GESTURE] Calling onPhotoChange: next');
+              onPhotoChangeRef.current('next');
+              lastPhotoChangeTime.current = now;
+            }
+          } else {
+            detectedGesture = leftHandPinch ? '🤏 TAY TRÁI (Đợi...)' : '🤏 TAY PHẢI (Đợi...)';
+          }
+        } else {
+          detectedGesture = leftHandPinch ? '🤏 TAY TRÁI' : '🤏 TAY PHẢI';
+        }
+        
+      } else if (isThumbsUp) {
+        thumbsUpFrames.current++;
+        thumbsDownFrames.current = 0;
+        pinchFrames.current = 0;
+        victoryFrames.current = 0;
+        openFrames.current = 0;
+        closedFrames.current = 0;
+        
+        detectedGesture = '👍 THUMBS UP (Tới)';
+        
+        if (thumbsUpFrames.current > CONFIDENCE_THRESHOLD && onCameraMoveRef.current) {
+          onCameraMoveRef.current('forward');
+        }
+        
+      } else if (isThumbsDown) {
+        thumbsDownFrames.current++;
+        thumbsUpFrames.current = 0;
+        pinchFrames.current = 0;
+        victoryFrames.current = 0;
+        openFrames.current = 0;
+        closedFrames.current = 0;
+        
+        detectedGesture = '👎 THUMBS DOWN (Lùi)';
+        
+        if (thumbsDownFrames.current > CONFIDENCE_THRESHOLD && onCameraMoveRef.current) {
+          onCameraMoveRef.current('backward');
+        }
+        
+      } else if (isVictory) {
+        victoryFrames.current++;
+        thumbsUpFrames.current = 0;
+        thumbsDownFrames.current = 0;
+        pinchFrames.current = 0;
+        openFrames.current = 0;
+        closedFrames.current = 0;
+        
+        detectedGesture = '✌️ VICTORY (Tuyết)';
+        
+        // Toggle snow effect (with cooldown)
+        const now = Date.now();
+        if (victoryFrames.current > CONFIDENCE_THRESHOLD && now - lastSnowToggleTime.current > 2000 && onSnowToggleRef.current) {
+          onSnowToggleRef.current();
+          lastSnowToggleTime.current = now;
+          victoryFrames.current = 0;
+        }
+        
+      } else if (extendedFingers >= 4) {
         openFrames.current++;
         closedFrames.current = 0;
+        thumbsUpFrames.current = 0;
+        thumbsDownFrames.current = 0;
+        pinchFrames.current = 0;
+        victoryFrames.current = 0;
         
-        setGestureStatus("Detected: OPEN (Unleash)");
-        setDebugInfo(prev => ({
-          ...prev,
-          extendedFingers,
-          gesture: '✋ XÒE TAY',
-          confidence: { open: openFrames.current, closed: 0 },
-          mode: openFrames.current > CONFIDENCE_THRESHOLD ? 'HỖN LOẠN' : prev.mode
-        }));
-
+        detectedGesture = '✋ XÒE TAY';
+        
         if (openFrames.current > CONFIDENCE_THRESHOLD) {
-            if (lastModeRef.current !== TreeMode.CHAOS) {
-                lastModeRef.current = TreeMode.CHAOS;
-                onModeChange(TreeMode.CHAOS);
-            }
+          if (lastModeRef.current !== TreeMode.CHAOS) {
+            lastModeRef.current = TreeMode.CHAOS;
+            onModeChange(TreeMode.CHAOS);
+          }
         }
-
-      } else if (extendedFingers <= 1) {
-        // CLOSED FIST -> RESTORE (FORMED)
+        
+        // Clear camera actions
+        if (onCameraMoveRef.current) onCameraMoveRef.current(null);
+        
+      } else if (extendedFingers <= 1 && !thumbExtended) {
         closedFrames.current++;
         openFrames.current = 0;
+        thumbsUpFrames.current = 0;
+        thumbsDownFrames.current = 0;
+        pinchFrames.current = 0;
+        victoryFrames.current = 0;
         
-        setGestureStatus("Detected: CLOSED (Restore)");
-        setDebugInfo(prev => ({
-          ...prev,
-          extendedFingers,
-          gesture: '✊ NẮM TAY',
-          confidence: { open: 0, closed: closedFrames.current },
-          mode: closedFrames.current > CONFIDENCE_THRESHOLD ? 'HOÀN CHỈNH' : prev.mode
-        }));
-
+        detectedGesture = '✊ NẮM TAY';
+        
         if (closedFrames.current > CONFIDENCE_THRESHOLD) {
-            if (lastModeRef.current !== TreeMode.FORMED) {
-                lastModeRef.current = TreeMode.FORMED;
-                onModeChange(TreeMode.FORMED);
-            }
+          if (lastModeRef.current !== TreeMode.FORMED) {
+            lastModeRef.current = TreeMode.FORMED;
+            onModeChange(TreeMode.FORMED);
+          }
         }
+        
+        // Clear camera actions
+        if (onCameraMoveRef.current) onCameraMoveRef.current(null);
+        
       } else {
-        // Ambiguous
-        setGestureStatus("Detected: ...");
-        setDebugInfo(prev => ({
-          ...prev,
-          extendedFingers,
-          gesture: '🤔 Không rõ',
-          confidence: { open: 0, closed: 0 }
-        }));
+        detectedGesture = '🤔 Không rõ';
         openFrames.current = 0;
         closedFrames.current = 0;
+        thumbsUpFrames.current = 0;
+        thumbsDownFrames.current = 0;
+        pinchFrames.current = 0;
+        victoryFrames.current = 0;
+        
+        // Clear camera actions
+        if (onCameraMoveRef.current) onCameraMoveRef.current(null);
       }
+      
+      // Update debug info
+      setGestureStatus(`Detected: ${detectedGesture}`);
+      setDebugInfo(prev => ({
+        ...prev,
+        extendedFingers,
+        gesture: detectedGesture,
+        confidence: { 
+          open: openFrames.current, 
+          closed: closedFrames.current 
+        },
+        mode: openFrames.current > CONFIDENCE_THRESHOLD ? 'HỖN LOẠN' : 
+              closedFrames.current > CONFIDENCE_THRESHOLD ? 'HOÀN CHỈNH' : prev.mode
+      }));
     };
 
     setupMediaPipe();

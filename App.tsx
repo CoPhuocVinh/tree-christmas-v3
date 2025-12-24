@@ -53,6 +53,10 @@ export default function App() {
   const [isSharedView, setIsSharedView] = useState(false);
   const [twoHandsDetected, setTwoHandsDetected] = useState(false);
   const [closestPhoto, setClosestPhoto] = useState<string | null>(null);
+  const [cameraMove, setCameraMove] = useState<'forward' | 'backward' | null>(null);
+  const [showSnow, setShowSnow] = useState(false);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
 
   // Check for share parameter in URL on mount
   useEffect(() => {
@@ -117,6 +121,46 @@ export default function App() {
     setUploadedPhotos(photos);
   };
 
+  const [photoChangeMessage, setPhotoChangeMessage] = useState<string>('');
+
+  const handlePhotoChange = (direction: 'next' | 'prev') => {
+    console.log('[DEBUG] handlePhotoChange called:', direction);
+    console.log('[DEBUG] uploadedPhotos.length:', uploadedPhotos.length);
+    
+    if (uploadedPhotos.length === 0) {
+      console.log('[DEBUG] No photos uploaded!');
+      setPhotoChangeMessage('⚠️ Chưa có ảnh! Hãy tải ảnh lên trước');
+      setTimeout(() => setPhotoChangeMessage(''), 2000);
+      return;
+    }
+    
+    setShowPhotoViewer(true);
+    
+    const newIndex = direction === 'next' 
+      ? (currentPhotoIndex + 1) % uploadedPhotos.length
+      : (currentPhotoIndex - 1 + uploadedPhotos.length) % uploadedPhotos.length;
+    
+    console.log('[DEBUG] Photo index:', currentPhotoIndex, '->', newIndex);
+    setCurrentPhotoIndex(newIndex);
+    
+    // Don't show message overlay since Photo Viewer already displays count
+    setPhotoChangeMessage('');
+    
+    // Auto hide after 3 seconds of no activity
+    setTimeout(() => {
+      setShowPhotoViewer(false);
+      setPhotoChangeMessage('');
+    }, 3000);
+  };
+
+  const handleCameraMove = (direction: 'forward' | 'backward' | null) => {
+    setCameraMove(direction);
+  };
+
+  const handleSnowToggle = () => {
+    setShowSnow(prev => !prev);
+  };
+
   return (
     <div className="w-full h-screen relative bg-gradient-to-b from-black via-[#001a0d] to-[#0a2f1e]">
       <ErrorBoundary>
@@ -127,7 +171,15 @@ export default function App() {
           shadows
         >
           <Suspense fallback={null}>
-            <Experience mode={mode} handPosition={handPosition} uploadedPhotos={uploadedPhotos} twoHandsDetected={twoHandsDetected} onClosestPhotoChange={handleClosestPhotoChange} />
+            <Experience 
+              mode={mode} 
+              handPosition={handPosition} 
+              uploadedPhotos={uploadedPhotos} 
+              twoHandsDetected={twoHandsDetected} 
+              onClosestPhotoChange={handleClosestPhotoChange}
+              cameraMove={cameraMove}
+              showSnow={showSnow}
+            />
           </Suspense>
         </Canvas>
       </ErrorBoundary>
@@ -152,37 +204,99 @@ export default function App() {
       {isLoadingShare && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="text-[#D4AF37] font-serif text-xl">
-            加载分享的照片中...
+            Đang tải ảnh được chia sẻ...
           </div>
         </div>
       )}
       
       {/* Gesture Control Module */}
-      <GestureController currentMode={mode} onModeChange={setMode} onHandPosition={handleHandPosition} onTwoHandsDetected={handleTwoHandsDetected} />
+      <GestureController 
+        currentMode={mode} 
+        onModeChange={setMode} 
+        onHandPosition={handleHandPosition} 
+        onTwoHandsDetected={handleTwoHandsDetected}
+        onPhotoChange={handlePhotoChange}
+        onCameraMove={handleCameraMove}
+        onSnowToggle={handleSnowToggle}
+      />
       
       {/* Photo Overlay - Shows when two hands detected */}
-      {closestPhoto && (
+      {twoHandsDetected && uploadedPhotos.length > 0 && (
         <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none animate-fade-in">
           {/* Semi-transparent backdrop */}
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
           
-          {/* Polaroid frame with photo */}
-          <div className="relative z-50 transform transition-all duration-500 ease-out animate-scale-in">
+          {/* Photo viewer with index */}
+          <div className="relative z-50 flex flex-col items-center transform transition-all duration-500 ease-out animate-scale-in">
+            {/* Photo index indicator */}
+            <div className="flex items-center gap-4 mb-4">
+              <span className="text-[#D4AF37] font-serif text-lg">
+                🙌 {currentPhotoIndex + 1} / {uploadedPhotos.length}
+              </span>
+            </div>
+            
             {/* Polaroid container */}
             <div className="bg-white p-4 pb-8 shadow-2xl" style={{ width: '60vmin', maxWidth: '600px' }}>
               {/* Gold clip at top */}
               <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-12 h-6 bg-gradient-to-b from-[#D4AF37] to-[#C5A028] rounded-sm shadow-lg"></div>
               
-              {/* Photo */}
+              {/* Photo - use currentPhotoIndex */}
               <img 
-                src={closestPhoto} 
-                alt="Selected Memory" 
+                src={uploadedPhotos[currentPhotoIndex]} 
+                alt={`Photo ${currentPhotoIndex + 1}`}
                 className="w-full aspect-square object-cover"
               />
               
               {/* Text label */}
-              <div className="text-center mt-4 font-serif text-gray-700 text-lg">
-                Happy Memories
+              <div className="text-center mt-4 font-serif text-gray-700 text-sm">
+                🤏 Pinch trái/phải để đổi ảnh
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo Change Notification - Top center */}
+      {photoChangeMessage && (
+        <div className="fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] pointer-events-none animate-pulse">
+          <div className="bg-black/80 border border-[#D4AF37] rounded-lg px-4 py-2 text-[#D4AF37] font-medium text-sm shadow-lg">
+            {photoChangeMessage}
+          </div>
+        </div>
+      )}
+
+      {/* Photo Viewer - Shows when pinch gesture changes photo */}
+      {showPhotoViewer && uploadedPhotos.length > 0 && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+          {/* Semi-transparent backdrop */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+          
+          {/* Photo viewer */}
+          <div className="relative z-50 flex flex-col items-center">
+            {/* Navigation indicators */}
+            <div className="flex items-center gap-4 mb-4">
+              <span className="text-white/50 text-2xl">◀️</span>
+              <span className="text-[#D4AF37] font-serif text-lg">
+                {currentPhotoIndex + 1} / {uploadedPhotos.length}
+              </span>
+              <span className="text-white/50 text-2xl">▶️</span>
+            </div>
+            
+            {/* Polaroid container */}
+            <div className="bg-white p-4 pb-8 shadow-2xl transition-all duration-300" style={{ width: '50vmin', maxWidth: '500px' }}>
+              {/* Gold clip at top */}
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-12 h-6 bg-gradient-to-b from-[#D4AF37] to-[#C5A028] rounded-sm shadow-lg"></div>
+              
+              {/* Photo */}
+              <img 
+                src={uploadedPhotos[currentPhotoIndex]} 
+                alt={`Photo ${currentPhotoIndex + 1}`} 
+                className="w-full aspect-square object-cover"
+              />
+              
+              {/* Text label */}
+              <div className="text-center mt-4 font-serif text-gray-700 text-sm">
+                🤏 Vuốt trái/phải để đổi ảnh
               </div>
             </div>
           </div>
