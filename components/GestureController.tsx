@@ -63,10 +63,32 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
   const lastPhotoChangeTime = useRef(0);
   const CONFIDENCE_THRESHOLD = 5; // Number of consecutive frames to confirm gesture
   const PHOTO_CHANGE_COOLDOWN = 500; // ms cooldown between photo changes
+  
+  // Refs to store stream and landmarker for cleanup
+  const streamRef = useRef<MediaStream | null>(null);
+  const handLandmarkerRef = useRef<HandLandmarker | null>(null);
 
   useEffect(() => {
-    let handLandmarker: HandLandmarker | null = null;
     let animationFrameId: number;
+    
+    // Only setup camera and MediaPipe when debugMode is ON
+    if (!debugMode) {
+      // Stop camera when debug mode is OFF
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      if (handLandmarkerRef.current) {
+        handLandmarkerRef.current.close();
+        handLandmarkerRef.current = null;
+      }
+      setIsLoaded(false);
+      setDebugInfo(prev => ({ ...prev, status: '⏸️ Debug tắt - Camera tắt' }));
+      return;
+    }
 
     const setupMediaPipe = async () => {
       try {
@@ -81,7 +103,7 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
 
         // Use local model file to avoid loading from Google Storage (blocked in China)
         // Model file should be downloaded using: npm run download-model or download-model.bat/.sh
-        handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `/models/hand_landmarker.task`,
             delegate: "GPU"
@@ -113,6 +135,8 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { width: 320, height: 240, facingMode: "user" }
           });
+          
+          streamRef.current = stream;
           
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
@@ -205,11 +229,11 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
     };
 
     const predictWebcam = () => {
-      if (!handLandmarker || !videoRef.current) return;
+      if (!handLandmarkerRef.current || !videoRef.current) return;
 
       const startTimeMs = performance.now();
       if (videoRef.current.videoWidth > 0) { // Ensure video is ready
-        const result = handLandmarker.detectForVideo(videoRef.current, startTimeMs);
+        const result = handLandmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
 
         if (result.landmarks && result.landmarks.length > 0) {
           // Check if two hands are detected
@@ -508,9 +532,18 @@ export const GestureController: React.FC<GestureControllerProps> = ({ onModeChan
 
     return () => {
       cancelAnimationFrame(animationFrameId);
-      if (handLandmarker) handLandmarker.close();
+      // Cleanup camera stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      // Cleanup hand landmarker
+      if (handLandmarkerRef.current) {
+        handLandmarkerRef.current.close();
+        handLandmarkerRef.current = null;
+      }
     };
-  }, [onModeChange]);
+  }, [onModeChange, debugMode]);
 
   // Sync ref with prop updates to prevent overriding in closure
   useEffect(() => {
