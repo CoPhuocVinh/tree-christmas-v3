@@ -1,0 +1,67 @@
+---
+alwaysApply: true
+---
+THIẾT LẬP VAI TRÒ:
+Bạn là một chuyên gia phát triển 3D sáng tạo, tinh thông React 19, TypeScript và Three.js (React Three Fiber – R3F).
+
+MỤC TIÊU NHIỆM VỤ:
+Xây dựng một ứng dụng Web 3D độ trung thực cao có tên “Cây Thông Noel Tương Tác Xa Hoa (Grand Luxury Interactive Christmas Tree)”.
+Phong cách thị giác mang cảm giác xa hoa kiểu Trump, với tông màu chủ đạo là xanh lục bảo đậm (deep emerald green) và vàng ánh kim nổi bật, kèm hiệu ứng phát sáng điện ảnh (cinematic glow).
+
+CÔNG NGHỆ SỬ DỤNG:
+- React 19
+- TypeScript
+- React Three Fiber
+- Drei
+- Postprocessing
+- Tailwind CSS
+
+LOGIC CỐT LÕI & KIẾN TRÚC:
+
+1. MÁY TRẠNG THÁI (STATE MACHINE):
+Bao gồm hai trạng thái:
+- CHAOS (Hỗn loạn, phân tán)
+- FORMED (Kết tụ thành cây)
+Các phần tử có thể biến hình động qua lại giữa hai trạng thái.
+
+2. HỆ TỌA ĐỘ KÉP (DUAL-POSITION SYSTEM):
+Mỗi phần tử (lá kim, đồ trang trí…) khi khởi tạo đều có hai vị trí:
+- ChaosPosition: tọa độ ngẫu nhiên trong không gian hình cầu
+- TargetPosition: tọa độ mục tiêu tạo thành hình nón của cây thông
+
+Trong useFrame, nội suy (Lerp) giữa hai vị trí dựa trên tiến trình animation.
+
+CHI TIẾT TRIỂN KHAI:
+
+1. HỆ THỐNG LÁ KIM (FOLIAGE):
+- Sử dụng THREE.Points
+- ShaderMaterial tùy chỉnh
+- Render số lượng lớn particle
+
+2. ĐỒ TRANG TRÍ (ORNAMENTS):
+- Sử dụng InstancedMesh để tối ưu hiệu năng
+- Các loại:
+  + Hộp quà nhiều màu (nặng)
+  + Quả cầu trang trí nhiều màu (nhẹ)
+  + Đèn trang trí điểm (rất nhẹ)
+- Mỗi loại có trọng số lực đẩy vật lý khác nhau
+- Dùng Lerp để tạo animation quay về vị trí mượt mà
+
+3. HẬU KỲ (POST-PROCESSING):
+- Bloom:
+  + Threshold: 0.8
+  + Intensity: 1.2
+- Tạo hào quang vàng sang trọng
+
+CẤU HÌNH CẢNH (SCENE SETUP):
+- Camera position: [0, 4, 20]
+- Environment light: Lobby HDRI
+
+TRANG TRÍ BỔ SUNG:
+- Thêm nhiều ảnh trang trí kiểu Polaroid treo trên cây
+
+TƯƠNG TÁC BẰNG CỬ CHỈ:
+- Dùng camera nhận diện tay
+- Tay mở: unleash (CHAOS)
+- Tay nắm: trở về cây thông (FORMED)
+- Di chuyển tay để điều chỉnh góc nhìn camera
