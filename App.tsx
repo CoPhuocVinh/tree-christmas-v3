@@ -324,6 +324,52 @@ export default function App() {
           <div className="text-[#F5E6BF]/50 text-xs mt-2 pt-2 border-t border-[#D4AF37]/20">
             {uploadMode ? '📤 Đang dùng ảnh tải lên' : '📁 Đang dùng ảnh từ folder photos/'}
           </div>
+          
+          {/* Gesture Guidelines - Compact */}
+          <div className="mt-3 pt-2 border-t border-[#D4AF37]/30">
+            <div className="text-[#D4AF37] font-bold mb-2 text-center text-xs">
+              🖐️ Cử chỉ
+            </div>
+            
+            <div className="grid grid-cols-2 gap-1 text-[10px]">
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded">
+                <span>🙌</span>
+                <span className="text-[#F5E6BF]/70">Xem ảnh</span>
+              </div>
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded">
+                <span>🤏◀️</span>
+                <span className="text-[#F5E6BF]/70">Ảnh trước</span>
+              </div>
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded">
+                <span>▶️🤏</span>
+                <span className="text-[#F5E6BF]/70">Ảnh sau</span>
+              </div>
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded">
+                <span>✌️</span>
+                <span className="text-[#F5E6BF]/70">Tuyết</span>
+              </div>
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded">
+                <span>👍</span>
+                <span className="text-[#F5E6BF]/70">Tiến tới</span>
+              </div>
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded">
+                <span>👎</span>
+                <span className="text-[#F5E6BF]/70">Lùi lại</span>
+              </div>
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded">
+                <span>✋</span>
+                <span className="text-[#F5E6BF]/70">Hỗn loạn</span>
+              </div>
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded">
+                <span>✊</span>
+                <span className="text-[#F5E6BF]/70">Cây thông</span>
+              </div>
+            </div>
+            
+            <div className="text-[#F5E6BF]/40 text-[9px] mt-2 text-center italic">
+              * Bật Debug để dùng
+            </div>
+          </div>
         </div>
       )}
       
